@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+oracledb
+openai
+anthropic
+google-generativeai
