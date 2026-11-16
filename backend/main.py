@@ -47,44 +47,17 @@ def parse_plan(plan_text: str) -> List[Dict[str, Any]]:
     return rows
 
 def build_graphs(parsed: List[Dict[str, Any]]):
-    # Current inefficient plan graph nodes (LR)
-    # Map operations to node labels
-    def node_type(op):
-        o = op.upper()
-        if "TABLE ACCESS" in o: return "table"
-        if "INDEX" in o: return "index"
-        if "HASH JOIN" in o or "MERGE JOIN" in o or "NESTED LOOPS" in o: return "join"
-        if "GROUP BY" in o: return "group"
-        if "FILTER" in o: return "filter"
-        return "op"
-    # Build current plan: transactions full scan + customers full scan -> join -> group
-    current_nodes = [
-        {"id":"t_trans", "label":"TRANSACTIONS", "op":"TABLE ACCESS FULL", "rows": 10000000, "color":"red"},
-        {"id":"t_cust", "label":"CUSTOMERS", "op":"TABLE ACCESS FULL", "rows": 5000, "color":"amber"},
-        {"id":"join1", "label":"HASH JOIN", "op":"HASH JOIN", "rows": 10000000, "color":"red"},
-        {"id":"group1", "label":"HASH GROUP BY", "op":"HASH GROUP BY", "rows": 1000, "color":"green"},
-    ]
-    current_edges = [
-        {"id":"e1","source":"t_trans","target":"join1","label":"Filter [TRANSACTIONS]"},
-        {"id":"e2","source":"t_cust","target":"join1","label":"Filter [CUSTOMERS]"},
-        {"id":"e3","source":"join1","target":"group1","label":"Merge"},
-    ]
-    # Efficient: filter+group before join
-    efficient_nodes = [
-        {"id":"t_trans", "label":"TRANSACTIONS", "op":"INDEX RANGE SCAN", "rows": 10000000, "color":"amber"},
-        {"id":"filter1", "label":"Filter", "op":"FILTER", "rows": 200000, "color":"green"},
-        {"id":"group1", "label":"Group", "op":"HASH GROUP BY", "rows": 5000, "color":"green"},
-        {"id":"t_cust", "label":"CUSTOMERS", "op":"TABLE ACCESS FULL", "rows": 5000, "color":"amber"},
-        {"id":"join1", "label":"HASH JOIN", "op":"HASH JOIN", "rows": 5000, "color":"green"},
-        {"id":"group2", "label":"HASH GROUP BY", "op":"HASH GROUP BY", "rows": 1000, "color":"green"},
-    ]
-    efficient_edges = [
-        {"id":"e1","source":"t_trans","target":"filter1","label":"Index Range Scan"},
-        {"id":"e2","source":"filter1","target":"group1","label":"Group"},
-        {"id":"e3","source":"group1","target":"join1","label":"Merge"},
-        {"id":"e4","source":"t_cust","target":"join1","label":"Filter [CUSTOMERS]"},
-        {"id":"e5","source":"join1","target":"group2","label":"Group"},
-    ]
+    if not parsed:
+        parsed = [{"id":1,"operation":"TABLE ACCESS FULL","name":"TABLE","arows":1000}]
+    current_nodes = []
+    for r in parsed:
+        current_nodes.append({"id":f"n{r['id']}","label":r.get("name") or r["operation"],"op":r["operation"],"rows":r.get("arows") or r.get("erows") or 1,"color":"amber"})
+    current_edges = []
+    for i in range(len(current_nodes)-1):
+        current_edges.append({"id":f"ce{i}","source":current_nodes[i]["id"],"target":current_nodes[i+1]["id"],"label":current_nodes[i]["op"]})
+    # efficient same nodes but green
+    efficient_nodes = [dict(n, color="green") for n in current_nodes]
+    efficient_edges = list(current_edges)
     return current_nodes, current_edges, efficient_nodes, efficient_edges
 
 class AnalyzeRequest(BaseModel):

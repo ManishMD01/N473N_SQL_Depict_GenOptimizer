@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { ReactFlow, Background, Controls, useNodesState, useEdgesState, Handle, Position, ReactFlowProvider } from "@xyflow/react";
+import { ReactFlow, Background, Controls, useNodesState, useEdgesState, Handle, Position, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, Edge } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import dagre from "dagre";
 
 type GNode = { id: string; label: string; op: string; rows: number; color: string };
 
@@ -29,32 +28,22 @@ function TableNode({ data }: { data: any }) {
 
 const nodeTypes = { table: TableNode };
 
-function layout(nodes: Node[], edges: Edge[]) {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
-  nodes.forEach((n) => g.setNode(n.id, { width: 160, height: 90 }));
-  edges.forEach((e) => g.setEdge(e.source, e.target));
-  dagre.layout(g);
-  return nodes.map((n) => {
-    const pos = g.node(n.id);
-    return { ...n, position: { x: pos.x - 80, y: pos.y - 45 } };
-  });
-}
-
 function Panel({ title, nodes, edges }: { title: string; nodes: GNode[]; edges: any[] }) {
   const [ns, setNodes] = useNodesState<Node>([]);
   const [es, setEdges] = useEdgesState<Edge>([]);
+  const { fitView } = useReactFlow();
   useEffect(() => {
     const flowNodes: Node[] = nodes.map((n) => ({ id: n.id, type: "table", data: { node: n }, position: { x: 0, y: 0 } }));
     const flowEdges: Edge[] = edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label, animated: true }));
-    setNodes(layout(flowNodes, flowEdges));
+    flowNodes.forEach((n,i)=>{ n.position={x:i*200,y:0}; });
+    setNodes(flowNodes);
     setEdges(flowEdges);
+    setTimeout(() => fitView(), 50);
   }, [nodes, edges]);
   return (
     <div className="flex-1 border rounded-lg overflow-hidden">
       <div className="bg-gray-100 px-3 py-2 font-semibold text-sm">{title}</div>
-      <div className="h-80">
+      <div style={{height:"320px"}}>
         <ReactFlow nodes={ns} edges={es} nodeTypes={nodeTypes} fitView>
           <Background />
           <Controls />
@@ -71,22 +60,18 @@ export default function App() {
   const [eff, setEff] = useState<{ nodes: GNode[]; edges: any[] }>({ nodes: [], edges: [] });
   const [optSql, setOptSql] = useState("");
   const [sugg, setSugg] = useState<string[]>([]);
-
-  const loadSample = async () => {
-    const r = await fetch("/api/sample");
-    const d = await r.json();
-    setSql(d.sql); setPlan(d.plan);
-  };
-  useEffect(() => { loadSample(); }, []);
-  useEffect(() => { if (sql && plan) analyze(); }, [sql, plan]);
+  const [status, setStatus] = useState("");
 
   const analyze = async () => {
     try {
+      setStatus("Analyzing...");
       const r = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sql, plan }) });
       const d = await r.json();
       setCur(d.current); setEff(d.efficient); setOptSql(d.optimized_sql); setSugg(d.suggestions);
-    } catch (e) { console.error(e); }
+      setStatus("Done");
+    } catch (e) { console.error(e); setStatus("Error: "+String(e)); }
   };
+
 
   return (
     <ReactFlowProvider>
@@ -96,7 +81,8 @@ export default function App() {
         <textarea className="border p-2 h-40 font-mono text-xs" value={sql} onChange={(e) => setSql(e.target.value)} placeholder="SQL" />
         <textarea className="border p-2 h-40 font-mono text-xs" value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Plan" />
       </div>
-      <button onClick={analyze} className="bg-blue-600 text-white px-4 py-2 rounded">Analyze & Optimize</button>
+      <button onClick={analyze} className="bg-blue-600 text-white px-4 py-2 rounded relative z-10 cursor-pointer">Analyze & Optimize</button>
+      <span className="ml-3 text-sm">{status}</span>
       <div className="flex gap-3">
         <Panel title="Current / Inefficient Execution Plan" nodes={cur.nodes} edges={cur.edges} />
         <Panel title="AI-Optimized / Efficient Execution Plan" nodes={eff.nodes} edges={eff.edges} />
